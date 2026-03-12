@@ -1,13 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="description" content="Find playgrounds and parks near you. Filter by equipment like swings, slides, and climbing structures. Age-group friendly playground finder for DC metro area and beyond." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#3d6b45" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Playgrounds" />
+  <meta name="theme-color" content="#3d9e51" id="theme-color-meta" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="PlaygroundFinder — Find Playgrounds Near You" />
+  <meta property="og:description" content="Discover playgrounds & parks near you. Filter by swings, slides, age groups, and more." />
+  <meta property="og:type" content="website" />
+
   <title>PlaygroundFinder — Find Playgrounds Near You</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json" />
+  <!-- Apple Touch Icon -->
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
 
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -22,10 +35,27 @@
   <link rel="stylesheet" href="css/map.css" />
   <link rel="stylesheet" href="css/components.css" />
 
-  <!-- Favicon inline SVG -->
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛝</text></svg>" />
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="assets/icons/icon-192.png" />
 </head>
 <body>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!--  INSTALL BANNER (PWA)                  -->
+  <!-- ═══════════════════════════════════════ -->
+  <div class="install-banner hidden" id="install-banner">
+    <div class="install-banner-content">
+      <img src="assets/icons/icon-192.png" alt="PlaygroundFinder" class="install-icon" />
+      <div class="install-text">
+        <strong>Add to Home Screen</strong>
+        <span>Quick access to playgrounds near you</span>
+      </div>
+    </div>
+    <div class="install-banner-actions">
+      <button class="install-dismiss" id="install-dismiss">Not now</button>
+      <button class="install-confirm" id="install-confirm">Install</button>
+    </div>
+  </div>
 
   <!-- ═══════════════════════════════════════ -->
   <!--  TOP BAR                               -->
@@ -34,7 +64,7 @@
     <div class="top-bar-inner">
       <!-- Logo / Brand -->
       <div class="brand">
-        <span class="brand-icon">🛝</span>
+        <img src="assets/icons/icon-192.png" alt="" class="brand-logo" />
         <span class="brand-name">PlaygroundFinder</span>
       </div>
 
@@ -67,7 +97,6 @@
               <span class="search-option-icon location-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
-                  <circle cx="12" cy="12" r="9" stroke-dasharray="2 2"/>
                 </svg>
               </span>
               <span>Use my current location</span>
@@ -89,6 +118,20 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Right Actions -->
+      <div class="top-bar-actions">
+        <!-- Dark Mode Toggle -->
+        <button class="icon-btn" id="dark-mode-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/>
+            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
       </div>
     </div>
   </header>
@@ -146,10 +189,31 @@
       <div class="bottom-sheet-handle"></div>
     </div>
 
+    <!-- Tab Bar -->
+    <div class="sheet-tabs">
+      <button class="sheet-tab active" data-tab="nearby" id="tab-nearby">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          <path d="M2 12h20"/>
+        </svg>
+        Nearby
+      </button>
+      <button class="sheet-tab" data-tab="saved" id="tab-saved">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+        Saved
+        <span class="tab-badge hidden" id="saved-badge">0</span>
+      </button>
+    </div>
+
     <!-- Sheet Header -->
     <div class="sheet-header" id="sheet-header">
-      <h2 class="sheet-title" id="sheet-title">Playgrounds Nearby</h2>
-      <div class="sheet-subtitle" id="sheet-subtitle">Loading...</div>
+      <div class="sheet-title-row">
+        <h2 class="sheet-title" id="sheet-title">Playgrounds Nearby</h2>
+        <div class="sheet-subtitle" id="sheet-subtitle">Loading...</div>
+      </div>
       <!-- Sort controls -->
       <div class="sort-row">
         <button class="sort-btn active" data-sort="distance">Nearest</button>
@@ -173,6 +237,13 @@
         <h3>No playgrounds found</h3>
         <p>Try zooming out, adjusting your filters, or searching a different area.</p>
         <button class="btn-secondary" id="clear-filters-empty">Clear Filters</button>
+      </div>
+
+      <!-- Saved Empty State -->
+      <div class="empty-state hidden" id="saved-empty-state">
+        <div class="empty-icon">❤️</div>
+        <h3>No saved playgrounds</h3>
+        <p>Tap the heart on any playground to save it for later.</p>
       </div>
 
       <!-- Error State -->
@@ -199,10 +270,29 @@
         </svg>
         Back
       </button>
+      <!-- Save / Heart button in header -->
+      <button class="detail-save-btn" id="detail-save-btn" aria-label="Save playground">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+      </button>
     </div>
 
-    <!-- Mini Map -->
-    <div id="detail-map" class="detail-map"></div>
+    <!-- Hero Image / Mini Map -->
+    <div class="detail-hero" id="detail-hero">
+      <div id="detail-map" class="detail-map"></div>
+      <!-- Photo overlay (shown when photo available) -->
+      <div class="detail-photo-overlay hidden" id="detail-photo-overlay">
+        <img id="detail-photo" alt="" class="detail-photo" />
+        <div class="detail-photo-attribution" id="detail-photo-attribution"></div>
+        <button class="detail-photo-toggle" id="detail-photo-toggle" title="Toggle photo/map">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </button>
+      </div>
+    </div>
 
     <!-- Detail Content -->
     <div class="detail-content" id="detail-content">
@@ -219,6 +309,7 @@
 
       <div class="detail-meta">
         <span class="detail-distance" id="detail-distance"></span>
+        <span class="detail-neighborhood" id="detail-neighborhood"></span>
         <span class="detail-hours" id="detail-hours"></span>
       </div>
 
@@ -228,7 +319,7 @@
         <div class="equipment-grid" id="detail-equipment-grid"></div>
         <div class="no-equipment-note hidden" id="no-equipment-note">
           Equipment info not yet mapped for this playground.
-          <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">Contribute on OpenStreetMap →</a>
+          <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">Add it on OpenStreetMap →</a>
         </div>
       </div>
 
@@ -236,6 +327,12 @@
       <div class="detail-section">
         <h3 class="detail-section-title">Details</h3>
         <div class="details-grid" id="detail-grid"></div>
+      </div>
+
+      <!-- Nearby Playgrounds (same area) -->
+      <div class="detail-section" id="detail-nearby-section">
+        <h3 class="detail-section-title">More Nearby</h3>
+        <div class="nearby-scroll" id="detail-nearby-list"></div>
       </div>
 
       <!-- Actions -->
@@ -252,7 +349,7 @@
             <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
             <path d="M2 12h20"/>
           </svg>
-          View on OSM
+          OSM
         </button>
       </div>
 
@@ -282,38 +379,14 @@
       <div class="filter-section">
         <h3 class="filter-section-title">Equipment</h3>
         <div class="filter-chips" id="equipment-filter-chips">
-          <label class="chip-label">
-            <input type="checkbox" name="equipment" value="swing" id="f-swing" />
-            <span class="chip">🔵 Swings</span>
-          </label>
-          <label class="chip-label">
-            <input type="checkbox" name="equipment" value="slide" id="f-slide" />
-            <span class="chip">🟠 Slides</span>
-          </label>
-          <label class="chip-label">
-            <input type="checkbox" name="equipment" value="climbingframe" id="f-climbing" />
-            <span class="chip">🟢 Climbing</span>
-          </label>
-          <label class="chip-label">
-            <input type="checkbox" name="equipment" value="sandpit" id="f-sandbox" />
-            <span class="chip">🟡 Sandbox</span>
-          </label>
-          <label class="chip-label">
-            <input type="checkbox" name="equipment" value="seesaw" id="f-seesaw" />
-            <span class="chip">🟣 Seesaw</span>
-          </label>
-          <label class="chip-label">
-            <input type="checkbox" name="equipment" value="structure" id="f-structure" />
-            <span class="chip">⚪ Structure</span>
-          </label>
-          <label class="chip-label">
-            <input type="checkbox" name="equipment" value="springy" id="f-springy" />
-            <span class="chip">🟤 Spring Riders</span>
-          </label>
-          <label class="chip-label">
-            <input type="checkbox" name="equipment" value="balance" id="f-balance" />
-            <span class="chip">🔴 Balance Beam</span>
-          </label>
+          <label class="chip-label"><input type="checkbox" name="equipment" value="swing" id="f-swing" /><span class="chip">🔵 Swings</span></label>
+          <label class="chip-label"><input type="checkbox" name="equipment" value="slide" id="f-slide" /><span class="chip">🟠 Slides</span></label>
+          <label class="chip-label"><input type="checkbox" name="equipment" value="climbingframe" id="f-climbing" /><span class="chip">🟢 Climbing</span></label>
+          <label class="chip-label"><input type="checkbox" name="equipment" value="sandpit" id="f-sandbox" /><span class="chip">🟡 Sandbox</span></label>
+          <label class="chip-label"><input type="checkbox" name="equipment" value="seesaw" id="f-seesaw" /><span class="chip">🟣 Seesaw</span></label>
+          <label class="chip-label"><input type="checkbox" name="equipment" value="structure" id="f-structure" /><span class="chip">⚪ Structure</span></label>
+          <label class="chip-label"><input type="checkbox" name="equipment" value="springy" id="f-springy" /><span class="chip">🟤 Spring Riders</span></label>
+          <label class="chip-label"><input type="checkbox" name="equipment" value="zipwire" id="f-zipwire" /><span class="chip">🟢 Zip Wire</span></label>
         </div>
       </div>
 
@@ -321,38 +394,10 @@
       <div class="filter-section">
         <h3 class="filter-section-title">Age Group</h3>
         <div class="filter-radios" id="age-filter-radios">
-          <label class="radio-label">
-            <input type="radio" name="age" value="all" id="f-age-all" checked />
-            <span class="radio-custom"></span>
-            <span class="radio-text">
-              <span class="radio-name">All Ages</span>
-              <span class="radio-desc">Show all playgrounds</span>
-            </span>
-          </label>
-          <label class="radio-label">
-            <input type="radio" name="age" value="toddler" id="f-age-toddler" />
-            <span class="radio-custom"></span>
-            <span class="radio-text">
-              <span class="radio-name">👶 Toddlers (0–3)</span>
-              <span class="radio-desc">Tot lots, gentle equipment</span>
-            </span>
-          </label>
-          <label class="radio-label">
-            <input type="radio" name="age" value="kids" id="f-age-kids" />
-            <span class="radio-custom"></span>
-            <span class="radio-text">
-              <span class="radio-name">🧒 Kids (3–8)</span>
-              <span class="radio-desc">Slides, swings, sandbox</span>
-            </span>
-          </label>
-          <label class="radio-label">
-            <input type="radio" name="age" value="older" id="f-age-older" />
-            <span class="radio-custom"></span>
-            <span class="radio-text">
-              <span class="radio-name">🧑 Older Kids (8–12)</span>
-              <span class="radio-desc">Climbing, bigger structures</span>
-            </span>
-          </label>
+          <label class="radio-label"><input type="radio" name="age" value="all" id="f-age-all" checked /><span class="radio-custom"></span><span class="radio-text"><span class="radio-name">All Ages</span><span class="radio-desc">Show all playgrounds</span></span></label>
+          <label class="radio-label"><input type="radio" name="age" value="toddler" id="f-age-toddler" /><span class="radio-custom"></span><span class="radio-text"><span class="radio-name">👶 Toddlers (0–3)</span><span class="radio-desc">Tot lots, gentle equipment</span></span></label>
+          <label class="radio-label"><input type="radio" name="age" value="kids" id="f-age-kids" /><span class="radio-custom"></span><span class="radio-text"><span class="radio-name">🧒 Kids (3–8)</span><span class="radio-desc">Slides, swings, sandbox</span></span></label>
+          <label class="radio-label"><input type="radio" name="age" value="older" id="f-age-older" /><span class="radio-custom"></span><span class="radio-text"><span class="radio-name">🧑 Older Kids (8–12)</span><span class="radio-desc">Climbing, bigger structures</span></span></label>
         </div>
       </div>
 
@@ -360,26 +405,11 @@
       <div class="filter-section">
         <h3 class="filter-section-title">Ground Surface</h3>
         <div class="filter-chips" id="surface-filter-chips">
-          <label class="chip-label">
-            <input type="checkbox" name="surface" value="grass" id="f-grass" />
-            <span class="chip">🌿 Grass</span>
-          </label>
-          <label class="chip-label">
-            <input type="checkbox" name="surface" value="woodchips" id="f-woodchips" />
-            <span class="chip">🪵 Woodchips</span>
-          </label>
-          <label class="chip-label">
-            <input type="checkbox" name="surface" value="rubber" id="f-rubber" />
-            <span class="chip">⚫ Rubber</span>
-          </label>
-          <label class="chip-label">
-            <input type="checkbox" name="surface" value="sand" id="f-sand" />
-            <span class="chip">🟤 Sand</span>
-          </label>
-          <label class="chip-label">
-            <input type="checkbox" name="surface" value="asphalt" id="f-asphalt" />
-            <span class="chip">🔲 Paved</span>
-          </label>
+          <label class="chip-label"><input type="checkbox" name="surface" value="grass" id="f-grass" /><span class="chip">🌿 Grass</span></label>
+          <label class="chip-label"><input type="checkbox" name="surface" value="woodchips" id="f-woodchips" /><span class="chip">🪵 Woodchips</span></label>
+          <label class="chip-label"><input type="checkbox" name="surface" value="rubber" id="f-rubber" /><span class="chip">⚫ Rubber</span></label>
+          <label class="chip-label"><input type="checkbox" name="surface" value="sand" id="f-sand" /><span class="chip">🟤 Sand</span></label>
+          <label class="chip-label"><input type="checkbox" name="surface" value="asphalt" id="f-asphalt" /><span class="chip">🔲 Paved</span></label>
         </div>
       </div>
 
@@ -387,16 +417,9 @@
       <div class="filter-section">
         <h3 class="filter-section-title">Accessibility & Amenities</h3>
         <div class="filter-toggles">
-          <label class="toggle-label">
-            <input type="checkbox" id="f-accessible" name="accessible" />
-            <span class="toggle-switch"></span>
-            <span class="toggle-text">♿ Wheelchair Accessible</span>
-          </label>
-          <label class="toggle-label">
-            <input type="checkbox" id="f-in-park" name="inpark" />
-            <span class="toggle-switch"></span>
-            <span class="toggle-text">🌳 Inside a Park</span>
-          </label>
+          <label class="toggle-label"><input type="checkbox" id="f-accessible" name="accessible" /><span class="toggle-switch"></span><span class="toggle-text">♿ Wheelchair Accessible</span></label>
+          <label class="toggle-label"><input type="checkbox" id="f-in-park" name="inpark" /><span class="toggle-switch"></span><span class="toggle-text">🌳 Inside a Park</span></label>
+          <label class="toggle-label"><input type="checkbox" id="f-saved-only" name="savedonly" /><span class="toggle-switch"></span><span class="toggle-text">❤️ Saved Playgrounds Only</span></label>
         </div>
       </div>
     </div>

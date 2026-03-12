@@ -9,11 +9,12 @@ import { distanceMiles } from './utils.js';
  */
 export function defaultFilters() {
   return {
-    equipment: [],   // array of OSM equipment tag values
-    age: 'all',      // 'all' | 'toddler' | 'kids' | 'older'
-    surfaces: [],    // array of surface tag values
+    equipment: [],
+    age: 'all',
+    surfaces: [],
     accessible: false,
     inPark: false,
+    savedOnly: false,
   };
 }
 
@@ -37,9 +38,9 @@ export function readFiltersFromDOM() {
     filters.surfaces.push(el.value);
   });
 
-  // Toggles
   filters.accessible = document.getElementById('f-accessible')?.checked || false;
   filters.inPark = document.getElementById('f-in-park')?.checked || false;
+  filters.savedOnly = document.getElementById('f-saved-only')?.checked || false;
 
   return filters;
 }
@@ -59,6 +60,9 @@ export function resetFiltersInDOM() {
 
   const inPark = document.getElementById('f-in-park');
   if (inPark) inPark.checked = false;
+
+  const savedOnly = document.getElementById('f-saved-only');
+  if (savedOnly) savedOnly.checked = false;
 }
 
 /**
@@ -71,6 +75,7 @@ export function countActiveFilters(filters) {
   if (filters.surfaces.length > 0) count += 1;
   if (filters.accessible) count += 1;
   if (filters.inPark) count += 1;
+  if (filters.savedOnly) count += 1;
   return count;
 }
 
@@ -125,12 +130,19 @@ function matchesSurface(pg, surfacesFilter) {
  * Returns filtered list
  */
 export function applyFilters(playgrounds, filters) {
+  // Get saved IDs once if needed
+  let savedIds = null;
+  if (filters.savedOnly) {
+    try { savedIds = JSON.parse(localStorage.getItem('savedPlaygrounds') || '[]'); } catch { savedIds = []; }
+  }
+
   return playgrounds.filter(pg => {
     if (!matchesAge(pg, filters.age)) return false;
     if (!matchesEquipment(pg, filters.equipment)) return false;
     if (!matchesSurface(pg, filters.surfaces)) return false;
     if (filters.accessible && !pg.accessible) return false;
     if (filters.inPark && !pg.isPark) return false;
+    if (filters.savedOnly && savedIds && !savedIds.includes(pg.id)) return false;
     return true;
   });
 }

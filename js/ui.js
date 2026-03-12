@@ -1,9 +1,11 @@
 /* ════════════════════════════════════════════════
    ui.js — Bottom sheet, detail view, filter panel,
            search, toast, and all UI interactions
+           v1.5: dark mode, favorites, tabs, nearby,
+                 neighborhood, photo hero
    ════════════════════════════════════════════════ */
 
-import { formatDistance, distanceMiles } from './utils.js';
+import { formatDistance, distanceMiles, storage } from './utils.js';
 import { getEquipmentList, getSurfaceInfo, formatAgeRange, getLocationLabel } from './data.js';
 import { initDetailMap, destroyDetailMap } from './map.js';
 import { getDirectionsUrl } from './utils.js';
@@ -17,7 +19,7 @@ let _sheetEl = null;
 let _dragStartY = 0;
 let _dragStartHeight = 0;
 let _isDragging = false;
-const PEEK_HEIGHT = 140;
+const PEEK_HEIGHT = 160; // slightly taller for tabs
 
 export function initBottomSheet() {
   _sheetEl = document.getElementById('bottom-sheet');
@@ -79,11 +81,9 @@ function onDragEnd() {
   _sheetEl.style.transition = '';
   const h = _sheetEl.getBoundingClientRect().height;
   const vh = window.innerHeight;
-
-  // Snap to nearest state
-  if (h < vh * 0.25)           setSheetState('peek');
-  else if (h < vh * 0.72)      setSheetState('half');
-  else                          setSheetState('full');
+  if (h < vh * 0.25)       setSheetState('peek');
+  else if (h < vh * 0.72)  setSheetState('half');
+  else                      setSheetState('full');
 }
 
 const onMouseDragEnd = onDragEnd;
@@ -98,10 +98,94 @@ export function setSheetState(state) {
 export function getSheetState() { return _sheetState; }
 
 /* ═══════════════════════════════ */
+/*  TABS (Nearby / Saved) — v1.5  */
+/* ═══════════════════════════════ */
+
+let _activeTab = 'nearby'; // 'nearby' | 'saved'
+let _onTabChange = null;
+
+export function initTabs(onTabChange) {
+  _onTabChange = onTabChange;
+
+  document.querySelectorAll('.sheet-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      if (tab === _activeTab) return;
+      switchTab(tab);
+    });
+  });
+}
+
+function switchTab(tab) {
+  _activeTab = tab;
+  document.querySelectorAll('.sheet-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+
+  // Show/hide sheet header (sort controls only for nearby)
+  const header = document.getElementById('sheet-header');
+  if (header) header.style.display = tab === 'nearby' ? '' : 'none';
+
+  if (_onTabChange) _onTabChange(tab);
+}
+
+export function getActiveTab() { return _activeTab; }
+
+export function updateSavedBadge(count) {
+  const badge = document.getElementById('saved-badge');
+  if (!badge) return;
+  if (count > 0) {
+    badge.textContent = count;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+/* ═══════════════════════════════ */
+/*  FAVORITES (v1.5)              */
+/* ═══════════════════════════════ */
+
+const SAVED_KEY = 'savedPlaygrounds';
+
+export function getSavedIds() {
+  return storage.get(SAVED_KEY, []);
+}
+
+export function isSaved(pgId) {
+  return getSavedIds().includes(pgId);
+}
+
+export function toggleSaved(pg) {
+  const ids = getSavedIds();
+  const idx = ids.indexOf(pg.id);
+  if (idx >= 0) {
+    ids.splice(idx, 1);
+    showToast(`Removed from saved`, '💔');
+  } else {
+    ids.push(pg.id);
+    showToast(`Saved! ❤️ ${pg.name}`);
+  }
+  storage.set(SAVED_KEY, ids);
+
+  // Update UI
+  updateSavedBadge(ids.length);
+  refreshSaveButtons(pg.id, ids.includes(pg.id));
+  return ids.includes(pg.id);
+}
+
+function refreshSaveButtons(pgId, saved) {
+  document.querySelectorAll(`[data-save-id="${pgId}"]`).forEach(btn => {
+    btn.classList.toggle('saved', saved);
+  });
+}
+
+/* ═══════════════════════════════ */
 /*  PLAYGROUND CARDS              */
 /* ═══════════════════════════════ */
 
 let _onCardClick = null;
+let _allPlaygroundsRef = []; // keep reference for nearby section
 
 export function initCards(onCardClick) {
   _onCardClick = onCardClick;
@@ -111,17 +195,26 @@ export function renderCards(playgrounds, userLocation) {
   const container = document.getElementById('playground-cards');
   const loading = document.getElementById('cards-loading');
   const empty = document.getElementById('empty-state');
+  const savedEmpty = document.getElementById('saved-empty-state');
   const error = document.getElementById('error-state');
+
+  _allPlaygroundsRef = playgrounds;
 
   if (!container) return;
 
   loading?.classList.add('hidden');
   error?.classList.add('hidden');
+  savedEmpty?.classList.add('hidden');
 
   if (playgrounds.length === 0) {
-    empty?.classList.remove('hidden');
+    if (_activeTab === 'saved') {
+      savedEmpty?.classList.remove('hidden');
+      empty?.classList.add('hidden');
+    } else {
+      empty?.classList.remove('hidden');
+    }
     container.innerHTML = '';
-    updateSheetTitle(0, null);
+    updateSheetTitle(0);
     return;
   }
 
@@ -132,12 +225,11 @@ export function renderCards(playgrounds, userLocation) {
     const dist = userLocation
       ? distanceMiles(userLocation.lat, userLocation.lng, pg.lat, pg.lng)
       : null;
-
     const card = createCard(pg, dist);
     container.appendChild(card);
   });
 
-  updateSheetTitle(playgrounds.length, userLocation);
+  updateSheetTitle(playgrounds.length);
 }
 
 function createCard(pg, distanceMi) {
@@ -150,43 +242,36 @@ function createCard(pg, distanceMi) {
   const surf = getSurfaceInfo(pg);
   const ageStr = formatAgeRange(pg.minAge, pg.maxAge);
   const isPark = pg.isPark && !pg.isPlayground;
+  const saved = isSaved(pg.id);
 
-  // Icon
-  const iconClass = isPark ? 'is-park' : equipList.length > 0 ? '' : 'no-equipment';
-  const emoji = isPark ? '🌳' : '🛝';
-
-  // Equipment tags (max 3 shown)
   const equipTags = equipList.slice(0, 3)
     .map(e => `<span class="card-tag equipment">${e.icon} ${e.label}</span>`)
     .join('');
   const moreTag = equipList.length > 3
     ? `<span class="card-tag equipment">+${equipList.length - 3}</span>` : '';
-
-  // Surface tag
   const surfTag = surf ? `<span class="card-tag surface">${surf.icon} ${surf.label}</span>` : '';
-
-  // Age tag
   const ageTag = ageStr ? `<span class="card-tag age">👶 ${ageStr}</span>` : '';
-
-  // Accessible
-  const accessTag = pg.accessible ? `<span class="card-tag accessible">♿ Accessible</span>` : '';
+  const accessTag = pg.accessible ? `<span class="card-tag accessible">♿</span>` : '';
 
   const distLabel = distanceMi !== null
     ? `<span class="dist-value">${formatDistance(distanceMi)}</span> away`
     : isPark ? 'Park' : 'Playground';
 
   card.innerHTML = `
-    <div class="card-icon ${iconClass}">${emoji}</div>
+    <div class="card-icon ${isPark ? 'is-park' : ''}">${isPark ? '🌳' : '🛝'}</div>
     <div class="card-body">
       <div class="card-name">${pg.name}</div>
       <div class="card-distance">${distLabel}</div>
       <div class="card-tags">
         ${equipTags}${moreTag}
-        ${surfTag}
-        ${ageTag}
-        ${accessTag}
+        ${surfTag}${ageTag}${accessTag}
       </div>
     </div>
+    <button class="card-save-btn ${saved ? 'saved' : ''}" data-save-id="${pg.id}" aria-label="${saved ? 'Unsave' : 'Save'} ${pg.name}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+      </svg>
+    </button>
     <div class="card-arrow">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <path d="m9 18 6-6-6-6"/>
@@ -194,36 +279,49 @@ function createCard(pg, distanceMi) {
     </div>
   `;
 
-  card.addEventListener('click', () => {
-    // Highlight this card
+  // Card body click → open detail
+  card.addEventListener('click', (e) => {
+    // Don't trigger if clicking the save button
+    if (e.target.closest('.card-save-btn')) return;
     document.querySelectorAll('.playground-card.active').forEach(c => c.classList.remove('active'));
     card.classList.add('active');
     if (_onCardClick) _onCardClick(pg);
   });
 
+  // Save button
+  const saveBtn = card.querySelector('.card-save-btn');
+  saveBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleSaved(pg);
+  });
+
   return card;
 }
 
-function updateSheetTitle(count, userLocation) {
+function updateSheetTitle(count) {
   const title = document.getElementById('sheet-title');
-  const subtitle = document.getElementById('sheet-subtitle');
-
   if (!title) return;
 
-  if (count === 0) {
-    title.textContent = 'No playgrounds found';
-    subtitle.textContent = 'Try adjusting your filters or zooming out';
+  if (_activeTab === 'saved') {
+    title.textContent = count === 0 ? 'Saved Playgrounds' : `${count} Saved`;
+    const sub = document.getElementById('sheet-subtitle');
+    if (sub) sub.textContent = count === 0 ? '' : 'Your favorites';
     return;
   }
 
-  title.textContent = count === 1 ? '1 Playground' : `${count} Playgrounds`;
-  subtitle.textContent = userLocation ? 'Sorted by distance' : 'In this area';
+  if (count === 0) {
+    title.textContent = 'No playgrounds found';
+  } else {
+    title.textContent = count === 1 ? '1 Playground' : `${count} Playgrounds`;
+  }
 }
 
 export function showCardsLoading() {
   document.getElementById('cards-loading')?.classList.remove('hidden');
-  document.getElementById('playground-cards').innerHTML = '';
+  const container = document.getElementById('playground-cards');
+  if (container) container.innerHTML = '';
   document.getElementById('empty-state')?.classList.add('hidden');
+  document.getElementById('saved-empty-state')?.classList.add('hidden');
   document.getElementById('error-state')?.classList.add('hidden');
 }
 
@@ -250,38 +348,45 @@ export function showResultsPill(count) {
 /* ═══════════════════════════════ */
 
 let _currentDetailPg = null;
+let _showingPhoto = false;
 
-export function showDetail(pg, userLocation) {
+export function showDetail(pg, userLocation, allPlaygrounds) {
   _currentDetailPg = pg;
+  _showingPhoto = false;
   const view = document.getElementById('detail-view');
   if (!view) return;
 
-  // Populate name
+  // ── Name ──
   const nameEl = document.getElementById('detail-name');
   if (nameEl) nameEl.textContent = pg.name;
 
-  // Distance
+  // ── Distance ──
   const distEl = document.getElementById('detail-distance');
   if (distEl) {
     if (userLocation) {
       const d = distanceMiles(userLocation.lat, userLocation.lng, pg.lat, pg.lng);
-      distEl.textContent = `${formatDistance(d)} away`;
+      distEl.textContent = `📍 ${formatDistance(d)} away`;
     } else {
       distEl.textContent = '';
     }
   }
 
-  // Hours
+  // ── Hours ──
   const hoursEl = document.getElementById('detail-hours');
-  if (hoursEl) {
-    hoursEl.textContent = pg.hours ? `🕐 ${pg.hours}` : '';
+  if (hoursEl) hoursEl.textContent = pg.hours ? `🕐 ${pg.hours}` : '';
+
+  // ── Neighborhood (async) ──
+  const neighEl = document.getElementById('detail-neighborhood');
+  if (neighEl) {
+    neighEl.textContent = '';
+    reverseGeocode(pg.lat, pg.lng).then(label => {
+      if (_currentDetailPg?.id === pg.id) neighEl.textContent = label ? `· ${label}` : '';
+    });
   }
 
-  // Equipment
+  // ── Equipment ──
   const equipGrid = document.getElementById('detail-equipment-grid');
   const noEquipNote = document.getElementById('no-equipment-note');
-  const equipSection = document.getElementById('detail-equipment-section');
-
   if (equipGrid) {
     const equipList = getEquipmentList(pg);
     if (equipList.length > 0) {
@@ -298,18 +403,17 @@ export function showDetail(pg, userLocation) {
     }
   }
 
-  // Details grid
+  // ── Details Grid ──
   const detailGrid = document.getElementById('detail-grid');
   if (detailGrid) {
     const surf = getSurfaceInfo(pg);
     const ageStr = formatAgeRange(pg.minAge, pg.maxAge);
-
     const items = [
-      { label: 'Type', value: pg.isPlayground ? '🛝 Playground' : '🌳 Park' },
-      surf ? { label: 'Surface', value: `${surf.icon} ${surf.label}` } : null,
-      ageStr ? { label: 'Age Range', value: `👶 ${ageStr}` } : null,
+      { label: 'Type',       value: pg.isPlayground ? '🛝 Playground' : '🌳 Park' },
+      surf ? { label: 'Surface',    value: `${surf.icon} ${surf.label}` } : null,
+      ageStr ? { label: 'Ages',     value: `👶 ${ageStr}` } : null,
       { label: 'Accessible', value: pg.accessible ? '♿ Yes' : '—' },
-      pg.hours ? { label: 'Hours', value: `🕐 ${pg.hours}` } : null,
+      pg.hours ? { label: 'Hours',  value: `🕐 ${pg.hours}` } : null,
     ].filter(Boolean);
 
     detailGrid.innerHTML = items.map(item => `
@@ -320,13 +424,22 @@ export function showDetail(pg, userLocation) {
     `).join('');
   }
 
-  // Directions button
-  const dirBtn = document.getElementById('directions-btn');
-  if (dirBtn) {
-    dirBtn.href = getDirectionsUrl(pg.lat, pg.lng, pg.name);
+  // ── Nearby (same area, excluding current) ──
+  renderNearbySection(pg, allPlaygrounds, userLocation);
+
+  // ── Save button ──
+  const saveBtn = document.getElementById('detail-save-btn');
+  if (saveBtn) {
+    saveBtn.classList.toggle('saved', isSaved(pg.id));
+    saveBtn.dataset.saveId = pg.id;
+    saveBtn.onclick = () => toggleSaved(pg);
   }
 
-  // OSM button
+  // ── Directions ──
+  const dirBtn = document.getElementById('directions-btn');
+  if (dirBtn) dirBtn.href = getDirectionsUrl(pg.lat, pg.lng, pg.name);
+
+  // ── OSM link ──
   const osmBtn = document.getElementById('detail-osm-btn');
   if (osmBtn) {
     osmBtn.onclick = () => {
@@ -334,32 +447,104 @@ export function showDetail(pg, userLocation) {
     };
   }
 
-  // Share button
+  // ── Share ──
   const shareBtn = document.getElementById('detail-share-btn');
-  if (shareBtn) {
-    shareBtn.onclick = () => sharePlayground(pg);
+  if (shareBtn) shareBtn.onclick = () => sharePlayground(pg);
+
+  // ── Photo toggle ──
+  const photoToggle = document.getElementById('detail-photo-toggle');
+  const photoOverlay = document.getElementById('detail-photo-overlay');
+  if (photoToggle && photoOverlay) {
+    photoOverlay.classList.add('hidden');
+    // Try to fetch a photo (async)
+    fetchPlaygroundPhoto(pg).then(photo => {
+      if (photo && _currentDetailPg?.id === pg.id) {
+        const img = document.getElementById('detail-photo');
+        const attr = document.getElementById('detail-photo-attribution');
+        if (img) img.src = photo.url;
+        if (attr) attr.textContent = photo.attribution;
+        photoOverlay.classList.remove('hidden');
+        photoToggle.onclick = () => togglePhoto(photoOverlay);
+      }
+    });
   }
 
-  // Show view with animation
+  // ── Show view ──
   view.classList.remove('hidden', 'slide-out');
   view.classList.add('slide-in');
 
-  // Init detail mini map
+  // Init mini map
   setTimeout(() => {
     initDetailMap('detail-map', pg.lat, pg.lng, pg.name);
   }, 50);
 
-  // Scroll to top
   document.getElementById('detail-content')?.scrollTo(0, 0);
+}
+
+function togglePhoto(overlay) {
+  _showingPhoto = !_showingPhoto;
+  const detailMap = document.getElementById('detail-map');
+  if (_showingPhoto) {
+    detailMap.style.opacity = '0';
+  } else {
+    detailMap.style.opacity = '1';
+    overlay.style.opacity = '0.3';
+    setTimeout(() => overlay.style.opacity = '1', 10);
+  }
+}
+
+function renderNearbySection(pg, allPlaygrounds, userLocation) {
+  const section = document.getElementById('detail-nearby-section');
+  const list = document.getElementById('detail-nearby-list');
+  if (!section || !list || !allPlaygrounds?.length) {
+    section?.classList.add('hidden');
+    return;
+  }
+
+  // Get up to 5 nearby (within ~1 mile), excluding current
+  const nearby = allPlaygrounds
+    .filter(p => p.id !== pg.id)
+    .map(p => ({
+      ...p,
+      _dist: distanceMiles(pg.lat, pg.lng, p.lat, p.lng)
+    }))
+    .filter(p => p._dist < 0.8)
+    .sort((a, b) => a._dist - b._dist)
+    .slice(0, 6);
+
+  if (nearby.length === 0) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  section.classList.remove('hidden');
+  list.innerHTML = nearby.map(p => {
+    const isPark = p.isPark && !p.isPlayground;
+    return `
+      <button class="nearby-card" data-nearby-id="${p.id}">
+        <div class="nearby-card-icon">${isPark ? '🌳' : '🛝'}</div>
+        <div class="nearby-card-name">${p.name}</div>
+        <div class="nearby-card-dist">${formatDistance(p._dist)}</div>
+      </button>
+    `;
+  }).join('');
+
+  list.querySelectorAll('.nearby-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const nearbyPg = allPlaygrounds.find(p => p.id === card.dataset.nearbyId);
+      if (nearbyPg) {
+        // Replace detail with this one
+        showDetail(nearbyPg, userLocation, allPlaygrounds);
+      }
+    });
+  });
 }
 
 export function hideDetail() {
   const view = document.getElementById('detail-view');
   if (!view || view.classList.contains('hidden')) return;
-
   view.classList.remove('slide-in');
   view.classList.add('slide-out');
-
   setTimeout(() => {
     view.classList.add('hidden');
     view.classList.remove('slide-out');
@@ -368,15 +553,61 @@ export function hideDetail() {
   }, 260);
 }
 
+/* ─── Reverse geocode (neighborhood name) ─── */
+async function reverseGeocode(lat, lng) {
+  const cacheKey = `rgeo_${lat.toFixed(3)},${lng.toFixed(3)}`;
+  const cached = sessionStorage.getItem(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=15`;
+    const res = await fetch(url, {
+      headers: { 'Accept': 'application/json', 'User-Agent': 'PlaygroundFinder/1.5' },
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = await res.json();
+    const addr = data.address || {};
+    const label = addr.suburb || addr.neighbourhood || addr.quarter ||
+                  addr.city_district || addr.city || addr.town || null;
+    if (label) sessionStorage.setItem(cacheKey, label);
+    return label;
+  } catch {
+    return null;
+  }
+}
+
+/* ─── Fetch photo from Wikimedia Commons ─── */
+async function fetchPlaygroundPhoto(pg) {
+  // Try Nominatim photo (via Wikimedia), or known park photos
+  // This is speculative — many playgrounds won't have photos
+  const name = encodeURIComponent(pg.name);
+  try {
+    // Search Wikimedia for the playground name
+    const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${name}&prop=pageimages&format=json&pithumbsize=600&origin=*`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    const data = await res.json();
+    const pages = Object.values(data.query?.pages || {});
+    const page = pages[0];
+    if (page?.thumbnail?.source) {
+      return {
+        url: page.thumbnail.source,
+        attribution: `📷 Wikipedia`,
+      };
+    }
+  } catch {
+    // Silent fail — photos are optional
+  }
+  return null;
+}
+
+/* ─── Share ─── */
 async function sharePlayground(pg) {
   const url = `${window.location.origin}${window.location.pathname}?lat=${pg.lat}&lng=${pg.lng}&name=${encodeURIComponent(pg.name)}`;
-  const text = `Check out ${pg.name} on PlaygroundFinder!`;
-
   if (navigator.share) {
     try {
-      await navigator.share({ title: pg.name, text, url });
+      await navigator.share({ title: pg.name, text: `Check out ${pg.name} on PlaygroundFinder!`, url });
     } catch (e) {
-      if (e.name !== 'AbortError') copyToClipboard(url);
+      if (e.name !== 'AbortError') { copyToClipboard(url); showToast('Link copied!'); }
     }
   } else {
     copyToClipboard(url);
@@ -387,13 +618,9 @@ async function sharePlayground(pg) {
 function copyToClipboard(text) {
   navigator.clipboard?.writeText(text).catch(() => {
     const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    ta.remove();
+    ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove();
   });
 }
 
@@ -415,7 +642,6 @@ export function updateFilterBadge(count) {
   const badge = document.getElementById('filter-badge');
   const btn = document.getElementById('filter-btn');
   if (!badge || !btn) return;
-
   if (count > 0) {
     badge.textContent = count;
     badge.classList.remove('hidden');
@@ -437,18 +663,15 @@ export function initSearch(onSearchSelect) {
 }
 
 export function openSearchDropdown() {
-  const dropdown = document.getElementById('search-dropdown');
-  dropdown?.classList.add('open');
+  document.getElementById('search-dropdown')?.classList.add('open');
 }
 
 export function closeSearchDropdown() {
-  const dropdown = document.getElementById('search-dropdown');
-  dropdown?.classList.remove('open');
+  document.getElementById('search-dropdown')?.classList.remove('open');
 }
 
 export function toggleSearchClear(visible) {
-  const btn = document.getElementById('search-clear');
-  btn?.classList.toggle('visible', visible);
+  document.getElementById('search-clear')?.classList.toggle('visible', visible);
 }
 
 export function showSearchLoading(show) {
@@ -462,7 +685,6 @@ export function renderSearchResults(results) {
   const list = document.getElementById('search-results-list');
   const loading = document.getElementById('search-loading');
   const noResults = document.getElementById('search-no-results');
-
   loading?.classList.add('hidden');
 
   if (!results || results.length === 0) {
@@ -470,14 +692,12 @@ export function renderSearchResults(results) {
     noResults?.classList.remove('hidden');
     return;
   }
-
   noResults?.classList.add('hidden');
   section?.classList.remove('hidden');
-
   if (!list) return;
+
   list.innerHTML = results.map((r, i) => {
     const label = getLocationLabel(r);
-    const type = r.type || 'place';
     return `
       <button class="search-option" data-result-index="${i}">
         <span class="search-option-icon" style="background:var(--green-100);color:var(--primary)">📍</span>
@@ -497,12 +717,7 @@ export function renderSearchResults(results) {
 export function renderRecentSearches(recents) {
   const section = document.getElementById('recent-searches-section');
   const list = document.getElementById('recent-searches-list');
-
-  if (!recents?.length) {
-    section?.classList.add('hidden');
-    return;
-  }
-
+  if (!recents?.length) { section?.classList.add('hidden'); return; }
   section?.classList.remove('hidden');
   if (!list) return;
 
@@ -525,32 +740,107 @@ export function renderRecentSearches(recents) {
 }
 
 /* ═══════════════════════════════ */
-/*  EXPLORE THIS AREA BUTTON      */
+/*  EXPLORE BTN                   */
 /* ═══════════════════════════════ */
 
-export function showExploreBtn() {
-  document.getElementById('explore-btn')?.classList.remove('hidden');
-}
-
-export function hideExploreBtn() {
-  document.getElementById('explore-btn')?.classList.add('hidden');
-}
+export function showExploreBtn() { document.getElementById('explore-btn')?.classList.remove('hidden'); }
+export function hideExploreBtn() { document.getElementById('explore-btn')?.classList.add('hidden'); }
 
 /* ═══════════════════════════════ */
-/*  MAP LOADING OVERLAY           */
+/*  MAP LOADING                   */
 /* ═══════════════════════════════ */
 
 export function showMapLoading() {
-  const overlay = document.getElementById('map-loading');
-  overlay?.classList.remove('fade-out');
-  overlay?.classList.remove('hidden');
+  const o = document.getElementById('map-loading');
+  o?.classList.remove('fade-out', 'hidden');
 }
 
 export function hideMapLoading() {
-  const overlay = document.getElementById('map-loading');
-  if (!overlay) return;
-  overlay.classList.add('fade-out');
-  setTimeout(() => overlay.classList.add('hidden'), 350);
+  const o = document.getElementById('map-loading');
+  if (!o) return;
+  o.classList.add('fade-out');
+  setTimeout(() => o.classList.add('hidden'), 350);
+}
+
+/* ═══════════════════════════════ */
+/*  DARK MODE (v1.5)              */
+/* ═══════════════════════════════ */
+
+const THEME_KEY = 'theme';
+
+export function initDarkMode() {
+  // Check saved pref or system pref
+  const saved = storage.get(THEME_KEY);
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const theme = saved || (prefersDark ? 'dark' : 'light');
+  applyTheme(theme);
+
+  document.getElementById('dark-mode-btn')?.addEventListener('click', toggleDarkMode);
+
+  // Listen for system theme changes
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    if (!storage.get(THEME_KEY)) applyTheme(e.matches ? 'dark' : 'light');
+  });
+}
+
+function toggleDarkMode() {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  storage.set(THEME_KEY, next);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  // Update theme-color meta
+  const meta = document.getElementById('theme-color-meta');
+  if (meta) meta.content = theme === 'dark' ? '#0f1115' : '#3d9e51';
+}
+
+/* ═══════════════════════════════ */
+/*  PWA INSTALL BANNER (v1.5)     */
+/* ═══════════════════════════════ */
+
+let _installPrompt = null;
+
+export function initPWA() {
+  // Capture install prompt
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    _installPrompt = e;
+
+    // Don't show if user dismissed before
+    if (!storage.get('installDismissed')) {
+      setTimeout(() => showInstallBanner(), 30000); // show after 30s
+    }
+  });
+
+  window.addEventListener('appinstalled', () => {
+    hideInstallBanner();
+    showToast('🎉 PlaygroundFinder installed!');
+    _installPrompt = null;
+  });
+
+  document.getElementById('install-dismiss')?.addEventListener('click', () => {
+    hideInstallBanner();
+    storage.set('installDismissed', true);
+  });
+
+  document.getElementById('install-confirm')?.addEventListener('click', async () => {
+    if (!_installPrompt) return;
+    _installPrompt.prompt();
+    const choice = await _installPrompt.userChoice;
+    if (choice.outcome === 'accepted') hideInstallBanner();
+    _installPrompt = null;
+  });
+}
+
+function showInstallBanner() {
+  document.getElementById('install-banner')?.classList.remove('hidden');
+}
+
+function hideInstallBanner() {
+  document.getElementById('install-banner')?.classList.add('hidden');
 }
 
 /* ═══════════════════════════════ */
@@ -560,15 +850,11 @@ export function hideMapLoading() {
 export function showToast(message, icon = null) {
   const container = document.getElementById('toast-container');
   if (!container) return;
-
   const toast = document.createElement('div');
   toast.className = 'toast';
-
   const iconHtml = icon ? `<span class="toast-icon">${icon}</span>` : '';
   toast.innerHTML = `${iconHtml}<span>${message}</span>`;
-
   container.appendChild(toast);
-
   setTimeout(() => {
     toast.classList.add('fade-out');
     setTimeout(() => toast.remove(), 260);

@@ -1,0 +1,26 @@
+{
+  "name": "PlaygroundFinder",
+  "short_name": "Playgrounds",
+  "description": "Find playgrounds and parks near you. Filter by swings, slides, age group, and more.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0faf1",
+  "theme_color": "#3d9e51",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["lifestyle", "navigation", "kids"],
+  "screenshots": []
+}
