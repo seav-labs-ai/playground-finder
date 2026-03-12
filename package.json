@@ -1,0 +1,12 @@
+{
+  "name": "playground-finder",
+  "version": "1.0.0",
+  "description": "A mobile-first playground and park finder app powered by OpenStreetMap",
+  "scripts": {
+    "dev": "npx --yes serve . -p 3456 --no-clipboard",
+    "start": "npx --yes serve . -p 3456 --no-clipboard"
+  },
+  "keywords": ["playground", "parks", "map", "leaflet", "openstreetmap"],
+  "author": "PlaygroundFinder",
+  "license": "MIT"
+}

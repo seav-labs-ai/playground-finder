@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="description" content="Find playgrounds and parks near you. Filter by equipment like swings, slides, and climbing structures. Age-group friendly playground finder for DC metro area and beyond." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#3d6b45" />
+  <title>PlaygroundFinder — Find Playgrounds Near You</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Leaflet MarkerCluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- App CSS -->
+  <link rel="stylesheet" href="css/index.css" />
+  <link rel="stylesheet" href="css/map.css" />
+  <link rel="stylesheet" href="css/components.css" />
+
+  <!-- Favicon inline SVG -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛝</text></svg>" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!--  TOP BAR                               -->
+  <!-- ═══════════════════════════════════════ -->
+  <header id="top-bar" class="top-bar">
+    <div class="top-bar-inner">
+      <!-- Logo / Brand -->
+      <div class="brand">
+        <span class="brand-icon">🛝</span>
+        <span class="brand-name">PlaygroundFinder</span>
+      </div>
+
+      <!-- Search Bar -->
+      <div class="search-container" id="search-container">
+        <div class="search-bar" id="search-bar">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input
+            type="text"
+            id="search-input"
+            class="search-input"
+            placeholder="Search neighborhoods, addresses..."
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          />
+          <button class="search-clear" id="search-clear" aria-label="Clear search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M18 6 6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Search Dropdown -->
+        <div class="search-dropdown" id="search-dropdown">
+          <div class="search-dropdown-inner">
+            <button class="search-option location-option" id="use-my-location">
+              <span class="search-option-icon location-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+                  <circle cx="12" cy="12" r="9" stroke-dasharray="2 2"/>
+                </svg>
+              </span>
+              <span>Use my current location</span>
+            </button>
+            <div id="recent-searches-section" class="search-section hidden">
+              <div class="search-section-label">Recent</div>
+              <div id="recent-searches-list"></div>
+            </div>
+            <div id="search-results-section" class="search-section hidden">
+              <div class="search-section-label">Results</div>
+              <div id="search-results-list"></div>
+            </div>
+            <div id="search-loading" class="search-loading hidden">
+              <div class="spinner-sm"></div>
+              <span>Searching...</span>
+            </div>
+            <div id="search-no-results" class="search-no-results hidden">
+              <span>No places found. Try a different search.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!--  MAP                                   -->
+  <!-- ═══════════════════════════════════════ -->
+  <div id="map-container" class="map-container">
+    <div id="map"></div>
+
+    <!-- Map Loading Overlay -->
+    <div class="map-loading-overlay" id="map-loading">
+      <div class="map-loading-inner">
+        <div class="spinner"></div>
+        <span>Finding playgrounds...</span>
+      </div>
+    </div>
+
+    <!-- Floating Action Buttons -->
+    <div class="fab-group" id="fab-group">
+      <button class="fab fab-primary" id="locate-btn" aria-label="Find my location" title="Find my location">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>
+          <circle cx="12" cy="12" r="8"/>
+        </svg>
+      </button>
+      <button class="fab fab-filter" id="filter-btn" aria-label="Filter playgrounds" title="Filter">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+        </svg>
+        <span class="filter-badge hidden" id="filter-badge">0</span>
+      </button>
+    </div>
+
+    <!-- Explore This Area Button (shows when map is panned) -->
+    <button class="explore-btn hidden" id="explore-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      Search this area
+    </button>
+
+    <!-- Results count pill (on map) -->
+    <div class="results-pill hidden" id="results-pill">
+      <span id="results-count">0</span> playgrounds found
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!--  BOTTOM SHEET                          -->
+  <!-- ═══════════════════════════════════════ -->
+  <div class="bottom-sheet" id="bottom-sheet">
+    <div class="bottom-sheet-handle-area" id="sheet-handle-area">
+      <div class="bottom-sheet-handle"></div>
+    </div>
+
+    <!-- Sheet Header -->
+    <div class="sheet-header" id="sheet-header">
+      <h2 class="sheet-title" id="sheet-title">Playgrounds Nearby</h2>
+      <div class="sheet-subtitle" id="sheet-subtitle">Loading...</div>
+      <!-- Sort controls -->
+      <div class="sort-row">
+        <button class="sort-btn active" data-sort="distance">Nearest</button>
+        <button class="sort-btn" data-sort="name">Name</button>
+        <button class="sort-btn" data-sort="equipment">Most Equipment</button>
+      </div>
+    </div>
+
+    <!-- Playground Cards -->
+    <div class="sheet-content" id="sheet-content">
+      <!-- Loading Skeletons -->
+      <div id="cards-loading" class="cards-loading">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+
+      <!-- Empty State -->
+      <div class="empty-state hidden" id="empty-state">
+        <div class="empty-icon">🔍</div>
+        <h3>No playgrounds found</h3>
+        <p>Try zooming out, adjusting your filters, or searching a different area.</p>
+        <button class="btn-secondary" id="clear-filters-empty">Clear Filters</button>
+      </div>
+
+      <!-- Error State -->
+      <div class="error-state hidden" id="error-state">
+        <div class="empty-icon">⚠️</div>
+        <h3>Couldn't load playgrounds</h3>
+        <p>Check your connection and try again.</p>
+        <button class="btn-primary" id="retry-btn">Try Again</button>
+      </div>
+
+      <!-- Playground Cards List -->
+      <div id="playground-cards" class="playground-cards"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!--  DETAIL VIEW                           -->
+  <!-- ═══════════════════════════════════════ -->
+  <div class="detail-view hidden" id="detail-view">
+    <div class="detail-header">
+      <button class="back-btn" id="detail-back-btn" aria-label="Back to list">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="m15 18-6-6 6-6"/>
+        </svg>
+        Back
+      </button>
+    </div>
+
+    <!-- Mini Map -->
+    <div id="detail-map" class="detail-map"></div>
+
+    <!-- Detail Content -->
+    <div class="detail-content" id="detail-content">
+      <div class="detail-name-row">
+        <h1 class="detail-name" id="detail-name">Playground Name</h1>
+        <button class="share-btn" id="detail-share-btn" aria-label="Share">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="detail-meta">
+        <span class="detail-distance" id="detail-distance"></span>
+        <span class="detail-hours" id="detail-hours"></span>
+      </div>
+
+      <!-- Equipment Section -->
+      <div class="detail-section" id="detail-equipment-section">
+        <h3 class="detail-section-title">Equipment</h3>
+        <div class="equipment-grid" id="detail-equipment-grid"></div>
+        <div class="no-equipment-note hidden" id="no-equipment-note">
+          Equipment info not yet mapped for this playground.
+          <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">Contribute on OpenStreetMap →</a>
+        </div>
+      </div>
+
+      <!-- Details Section -->
+      <div class="detail-section">
+        <h3 class="detail-section-title">Details</h3>
+        <div class="details-grid" id="detail-grid"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="detail-actions">
+        <a id="directions-btn" class="btn-directions" href="#" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+          </svg>
+          Get Directions
+        </a>
+        <button class="btn-osm" id="detail-osm-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            <path d="M2 12h20"/>
+          </svg>
+          View on OSM
+        </button>
+      </div>
+
+      <!-- OSM Attribution -->
+      <div class="osm-attribution">
+        Data © <a href="https://openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a> contributors
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!--  FILTER PANEL                          -->
+  <!-- ═══════════════════════════════════════ -->
+  <div class="filter-overlay hidden" id="filter-overlay"></div>
+  <div class="filter-panel hidden" id="filter-panel">
+    <div class="filter-panel-header">
+      <h2>Filter Playgrounds</h2>
+      <button class="filter-close-btn" id="filter-close-btn" aria-label="Close filters">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="filter-panel-content">
+      <!-- Equipment -->
+      <div class="filter-section">
+        <h3 class="filter-section-title">Equipment</h3>
+        <div class="filter-chips" id="equipment-filter-chips">
+          <label class="chip-label">
+            <input type="checkbox" name="equipment" value="swing" id="f-swing" />
+            <span class="chip">🔵 Swings</span>
+          </label>
+          <label class="chip-label">
+            <input type="checkbox" name="equipment" value="slide" id="f-slide" />
+            <span class="chip">🟠 Slides</span>
+          </label>
+          <label class="chip-label">
+            <input type="checkbox" name="equipment" value="climbingframe" id="f-climbing" />
+            <span class="chip">🟢 Climbing</span>
+          </label>
+          <label class="chip-label">
+            <input type="checkbox" name="equipment" value="sandpit" id="f-sandbox" />
+            <span class="chip">🟡 Sandbox</span>
+          </label>
+          <label class="chip-label">
+            <input type="checkbox" name="equipment" value="seesaw" id="f-seesaw" />
+            <span class="chip">🟣 Seesaw</span>
+          </label>
+          <label class="chip-label">
+            <input type="checkbox" name="equipment" value="structure" id="f-structure" />
+            <span class="chip">⚪ Structure</span>
+          </label>
+          <label class="chip-label">
+            <input type="checkbox" name="equipment" value="springy" id="f-springy" />
+            <span class="chip">🟤 Spring Riders</span>
+          </label>
+          <label class="chip-label">
+            <input type="checkbox" name="equipment" value="balance" id="f-balance" />
+            <span class="chip">🔴 Balance Beam</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Age Range -->
+      <div class="filter-section">
+        <h3 class="filter-section-title">Age Group</h3>
+        <div class="filter-radios" id="age-filter-radios">
+          <label class="radio-label">
+            <input type="radio" name="age" value="all" id="f-age-all" checked />
+            <span class="radio-custom"></span>
+            <span class="radio-text">
+              <span class="radio-name">All Ages</span>
+              <span class="radio-desc">Show all playgrounds</span>
+            </span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="age" value="toddler" id="f-age-toddler" />
+            <span class="radio-custom"></span>
+            <span class="radio-text">
+              <span class="radio-name">👶 Toddlers (0–3)</span>
+              <span class="radio-desc">Tot lots, gentle equipment</span>
+            </span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="age" value="kids" id="f-age-kids" />
+            <span class="radio-custom"></span>
+            <span class="radio-text">
+              <span class="radio-name">🧒 Kids (3–8)</span>
+              <span class="radio-desc">Slides, swings, sandbox</span>
+            </span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="age" value="older" id="f-age-older" />
+            <span class="radio-custom"></span>
+            <span class="radio-text">
+              <span class="radio-name">🧑 Older Kids (8–12)</span>
+              <span class="radio-desc">Climbing, bigger structures</span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Surface -->
+      <div class="filter-section">
+        <h3 class="filter-section-title">Ground Surface</h3>
+        <div class="filter-chips" id="surface-filter-chips">
+          <label class="chip-label">
+            <input type="checkbox" name="surface" value="grass" id="f-grass" />
+            <span class="chip">🌿 Grass</span>
+          </label>
+          <label class="chip-label">
+            <input type="checkbox" name="surface" value="woodchips" id="f-woodchips" />
+            <span class="chip">🪵 Woodchips</span>
+          </label>
+          <label class="chip-label">
+            <input type="checkbox" name="surface" value="rubber" id="f-rubber" />
+            <span class="chip">⚫ Rubber</span>
+          </label>
+          <label class="chip-label">
+            <input type="checkbox" name="surface" value="sand" id="f-sand" />
+            <span class="chip">🟤 Sand</span>
+          </label>
+          <label class="chip-label">
+            <input type="checkbox" name="surface" value="asphalt" id="f-asphalt" />
+            <span class="chip">🔲 Paved</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Other -->
+      <div class="filter-section">
+        <h3 class="filter-section-title">Accessibility & Amenities</h3>
+        <div class="filter-toggles">
+          <label class="toggle-label">
+            <input type="checkbox" id="f-accessible" name="accessible" />
+            <span class="toggle-switch"></span>
+            <span class="toggle-text">♿ Wheelchair Accessible</span>
+          </label>
+          <label class="toggle-label">
+            <input type="checkbox" id="f-in-park" name="inpark" />
+            <span class="toggle-switch"></span>
+            <span class="toggle-text">🌳 Inside a Park</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter Footer -->
+    <div class="filter-panel-footer">
+      <button class="btn-outline" id="filter-reset-btn">Reset All</button>
+      <button class="btn-primary" id="filter-apply-btn">Apply Filters</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!--  TOAST NOTIFICATIONS                   -->
+  <!-- ═══════════════════════════════════════ -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet MarkerCluster -->
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <!-- App JS Modules -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
