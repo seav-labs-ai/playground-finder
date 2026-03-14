@@ -343,19 +343,50 @@
           </svg>
           Get Directions
         </a>
-        <button class="btn-osm" id="detail-osm-btn">
+        <a id="detail-streetview-btn" class="btn-osm" href="#" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-            <path d="M2 12h20"/>
+            <circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20"/><path d="M2 12h20"/>
           </svg>
-          OSM
-        </button>
+          Street View
+        </a>
+      </div>
+
+      <p id="detail-description" class="detail-description hidden"></p>
+
+      <div class="detail-section">
+        <h3 class="detail-section-title">Safety & Amenities</h3>
+        <div id="detail-safety-grid" class="equipment-grid"></div>
+      </div>
+
+      <!-- Equipment Section -->
+      <div class="detail-section" id="detail-equipment-section">
+        <h3 class="detail-section-title">Equipment</h3>
+        <div class="equipment-grid" id="detail-equipment-grid"></div>
+        <div class="no-equipment-note hidden" id="no-equipment-note">
+          Equipment info not yet mapped for this playground.
+          <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">Add it on OpenStreetMap →</a>
+        </div>
+      </div>
+
+      <!-- Details Section -->
+      <div class="detail-section">
+        <h3 class="detail-section-title">Details</h3>
+        <div class="details-grid" id="detail-grid"></div>
+      </div>
+
+      <!-- Nearby Playgrounds (same area) -->
+      <div class="detail-section" id="detail-nearby-section">
+        <div class="section-header-row">
+          <h3 class="detail-section-title">More Nearby</h3>
+          <a id="detail-search-images" href="#" target="_blank" rel="noopener" class="detail-link">Search Images ↗</a>
+        </div>
+        <div class="nearby-scroll" id="detail-nearby-list"></div>
       </div>
 
       <!-- OSM Attribution -->
       <div class="osm-attribution">
-        Data © <a href="https://openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a> contributors
+        <div id="detail-operator" class="operator-label"></div>
+        <button class="btn-osm" id="detail-osm-btn">Edit on OpenStreetMap</button>
       </div>
     </div>
   </div>

@@ -55,6 +55,7 @@ function buildQuery(south, west, north, east) {
   way["leisure"="playground"](${bbox});
   node["leisure"="park"]["name"](${bbox});
   way["leisure"="park"]["name"](${bbox});
+  node["amenity"~"toilets|drinking_water"](${bbox});
 );
 out body center qt;
   `.trim();
@@ -172,33 +173,34 @@ async function enrichWithEquipment(playgrounds, south, west, north, east) {
  * Parse OSM elements into our playground data model
  */
 function parseElements(elements) {
-  const results = [];
+  const objects = [];
+  const amenities = []; // standalone toilets/h2o
   const seen = new Set();
 
   for (const el of elements) {
-    // Get lat/lng
     let lat, lng;
-    if (el.type === 'node') {
-      lat = el.lat;
-      lng = el.lon;
-    } else if (el.type === 'way' && el.center) {
-      lat = el.center.lat;
-      lng = el.center.lon;
-    } else {
+    if (el.type === 'node') { lat = el.lat; lng = el.lon; }
+    else if (el.type === 'way' && el.center) { lat = el.center.lat; lng = el.center.lon; }
+    else continue;
+
+    const tags = el.tags || {};
+    
+    // Handle specific amenities (water/toilets) as standalone info to link later
+    if (tags.amenity === 'toilets' || tags.amenity === 'drinking_water') {
+      amenities.push({ type: tags.amenity, lat, lng });
       continue;
     }
 
-    // Deduplicate by coords rounded to 4 decimal places
     const dedupeKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
 
-    const tags = el.tags || {};
     const leisure = tags.leisure;
     const isPlayground = leisure === 'playground';
     const isPark = leisure === 'park';
 
-    // Parse equipment from tags
+    if (!isPlayground && !isPark) continue;
+
     const equipment = [];
     for (const [tagKey, tagVal] of Object.entries(tags)) {
       if (tagKey === 'playground' && EQUIPMENT_MAP[tagVal]) {
@@ -206,25 +208,23 @@ function parseElements(elements) {
       }
     }
 
-    // Parse surface
     const rawSurface = tags.surface || tags.playground_surface || '';
     const surface = SURFACE_MAP[rawSurface?.toLowerCase()] || null;
-
-    // Parse age
     const minAge = tags.min_age ? parseInt(tags.min_age) : null;
     const maxAge = tags.max_age ? parseInt(tags.max_age) : null;
-
-    // Parse accessibility
     const wheelchair = tags.wheelchair;
     const accessible = wheelchair === 'yes' || wheelchair === 'designated';
-
-    // Parse hours
     const hours = tags.opening_hours || null;
-
-    // Determine name
     const name = tags.name || tags['name:en'] || (isPlayground ? 'Unnamed Playground' : 'Unnamed Park');
 
-    results.push({
+    // Advanced OSM tags (V2.0)
+    const shaded = tags.shaded === 'yes' || tags.covered === 'yes';
+    const fenced = tags.fenced === 'yes' || tags.barrier === 'fence';
+    const lit = tags.lit === 'yes';
+    const description = tags.description || tags.note || null;
+    const operator = tags.operator || tags.owner || null;
+
+    objects.push({
       id: `${el.type}-${el.id}`,
       osmId: el.id,
       osmType: el.type,
@@ -233,20 +233,37 @@ function parseElements(elements) {
       name,
       isPlayground,
       isPark,
-      equipment,           // array of equipment tags
-      surface,             // { label, icon } or null
+      equipment,
+      surface,
       rawSurface,
       minAge,
       maxAge,
       accessible,
       wheelchair,
       hours,
-      tags,               // raw tags for reference
-      distance: null,     // populated later
+      shaded,
+      fenced,
+      lit,
+      description,
+      operator,
+      amenities: [], // populated later
+      tags,
+      distance: null, 
     });
   }
 
-  return results.filter(p => p.isPlayground || (p.isPark && p.name));
+  // Final merge logic: associate amenities with playgrounds/parks
+  for (const amenity of amenities) {
+    let closest = null;
+    let minDist = 0.0015; // ~150 meters limit
+    for (const obj of objects) {
+      const d = Math.sqrt((obj.lat - amenity.lat) ** 2 + (obj.lng - amenity.lng) ** 2);
+      if (d < minDist) { minDist = d; closest = obj; }
+    }
+    if (closest) closest.amenities.push(amenity.type);
+  }
+
+  return objects.filter(p => (p.isPlayground || (p.isPark && p.name)));
 }
 
 /**

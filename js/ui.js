@@ -377,11 +377,66 @@ export function showDetail(pg, userLocation, allPlaygrounds) {
 
   // ── Neighborhood (async) ──
   const neighEl = document.getElementById('detail-neighborhood');
+  let neighborhoodName = '';
   if (neighEl) {
     neighEl.textContent = '';
     reverseGeocode(pg.lat, pg.lng).then(label => {
-      if (_currentDetailPg?.id === pg.id) neighEl.textContent = label ? `· ${label}` : '';
+      if (_currentDetailPg?.id === pg.id) {
+        neighborhoodName = label || '';
+        neighEl.textContent = label ? `· ${label}` : '';
+        // Update image search link with neighborhood
+        const imgLink = document.getElementById('detail-search-images');
+        if (imgLink) {
+          const q = encodeURIComponent(`${pg.name} ${label || ''} playground`);
+          imgLink.href = `https://www.google.com/search?q=${q}&tbm=isch`;
+        }
+      }
     });
+  }
+
+  // ── Description (v2.0) ──
+  const descEl = document.getElementById('detail-description');
+  if (descEl) {
+    if (pg.description) {
+      descEl.textContent = pg.description;
+      descEl.classList.remove('hidden');
+    } else {
+      descEl.classList.add('hidden');
+    }
+  }
+
+  // ── Safety & Amenities (v2.0) ──
+  const safetyGrid = document.getElementById('detail-safety-grid');
+  if (safetyGrid) {
+    const amenities = [
+      pg.fenced ? { label: 'Fenced', icon: '🔒' } : null,
+      pg.shaded ? { label: 'Shaded', icon: '⛱️' } : null,
+      pg.lit ? { label: 'Lit at Night', icon: '💡' } : null,
+      pg.amenities?.includes('toilets') ? { label: 'Restrooms', icon: '🚻' } : null,
+      pg.amenities?.includes('drinking_water') ? { label: 'Water', icon: '🚰' } : null,
+    ].filter(Boolean);
+
+    safetyGrid.innerHTML = amenities.map(a => `
+      <div class="equipment-item">
+        <span class="equip-icon">${a.icon}</span>
+        <span>${a.label}</span>
+      </div>
+    `).join('');
+    
+    // Hide section if empty
+    safetyGrid.parentElement.classList.toggle('hidden', amenities.length === 0);
+  }
+
+  // ── Operator (v2.0) ──
+  const operatorEl = document.getElementById('detail-operator');
+  if (operatorEl) {
+    operatorEl.textContent = pg.operator ? `Managed by ${pg.operator}` : '';
+  }
+
+  // ── External Links (v2.0) ──
+  const streetViewBtn = document.getElementById('detail-streetview-btn');
+  if (streetViewBtn) {
+    streetViewBtn.href = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${pg.lat},${pg.lng}`;
   }
 
   // ── Equipment ──
